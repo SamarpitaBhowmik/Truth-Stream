@@ -1,67 +1,66 @@
-
-import React from 'react';
-import { ExternalLink, Clock, ArrowRight, Circle } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { ExternalLink, Clock, ArrowRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
 const SentimentFeed = ({ liveMode }) => {
-  const newsItems = [
-    {
-      title: 'AI Models Show Surprising Reasoning Abilities',
-      source: 'TechCrunch',
-      time: 'less than a minute ago',
-      snippet: 'Researchers discover new emergent properties in large language models that mimic human-like reasoning in complex scenarios.',
-      sentiment: 'positive',
-      bias: '25/100',
-      emotion: 'Surprise',
-      verified: true,
-      newItem: true
-    },
-    {
-      title: 'Breakthrough in Healthcare: New Treatment Method Shows Promise',
-      source: 'Nature Medicine',
-      time: 'less than a minute ago',
-      snippet: 'Scientists develop innovative approach to treating chronic conditions, showing 87% efficacy in early clinical trials.',
-      sentiment: 'positive',
-      bias: '15/100',
-      emotion: 'Joy',
-      verified: true,
-      newItem: false
-    },
-    {
-      title: 'Global Economy Faces Uncertainty Amid Inflation Concerns',
-      source: 'Financial Times',
-      time: '3 minutes ago',
-      snippet: 'Experts warn of possible recession as central banks continue to raise interest rates to combat persistent inflation.',
-      sentiment: 'negative',
-      bias: '30/100',
-      emotion: 'Fear',
-      verified: true,
-      newItem: false
-    },
-    {
-      title: 'New Research Examines Climate Impact on Agriculture',
-      source: 'Science Daily',
-      time: '15 minutes ago',
-      snippet: 'Study finds mixed results on crop yields as farmers adapt to changing weather patterns across different regions.',
-      sentiment: 'neutral',
-      bias: '10/100',
-      emotion: 'Neutral',
-      verified: true,
-      newItem: false
-    },
-    {
-      title: 'Tech Companies Announce Layoffs Amid Market Slowdown',
-      source: 'Bloomberg',
-      time: '32 minutes ago',
-      snippet: 'Major technology firms cut workforce by 5-10% as consumer spending decreases and advertising revenue declines.',
-      sentiment: 'negative',
-      bias: '20/100',
-      emotion: 'Concern',
-      verified: true,
-      newItem: false
-    }
-  ];
+  const [newsItems, setNewsItems] = useState([]);
+
+  // Establish SSE connection
+  useEffect(() => {
+    const eventSource = new EventSource('http://localhost:8080');
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+    
+        // Detect if it's Google Trends-style
+        if (Array.isArray(data.news)) {
+          const formattedItems = data.news.map((newsItem) => ({
+            title: newsItem.title,
+            source: newsItem.source || new URL(newsItem.url).hostname,
+            time: new Date(data.pubDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            snippet: data.groqAnalysis?.summary || '', // summary is used as snippet
+            sentiment: data.groqAnalysis?.sentiment?.toLowerCase() || 'neutral',
+            bias: data.groqAnalysis?.bias_level === 'Low' ? '10/100' : '30/100',
+            emotion: data.groqAnalysis?.mood || 'Neutral',
+            verified: true,
+            newItem: true,
+            newsUrl: newsItem.url,
+          }));
+    
+          setNewsItems((prevItems) => [...formattedItems, ...prevItems]);
+        } else {
+          // Original structure fallback
+          const formattedItem = {
+            title: data.title,
+            source: new URL(data.newsUrl).hostname,
+            time: new Date(data.pubDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            snippet: data.description,
+            sentiment: data.groqAnalysis?.sentiment?.toLowerCase() || 'neutral',
+            bias: data.groqAnalysis?.bias_level === 'Low' ? '10/100' : '30/100',
+            emotion: data.groqAnalysis?.mood || 'Neutral',
+            verified: true,
+            newItem: true,
+            newsUrl: data.newsUrl,
+          };
+    
+          setNewsItems((prevItems) => [formattedItem, ...prevItems]);
+        }
+      } catch (err) {
+        console.error('Invalid SSE data:', err);
+      }
+    };
+    
+    eventSource.onerror = (err) => {
+      console.error('SSE error:', err);
+      eventSource.close();
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, []);
 
   const getSentimentColor = (sentiment) => {
     switch (sentiment) {
@@ -85,12 +84,23 @@ const SentimentFeed = ({ liveMode }) => {
     }
   };
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setNewsItems((items) =>
+        items.map((item) => ({ ...item, newItem: false }))
+      );
+    }, 6000);
+  
+    return () => clearTimeout(timer);
+  }, [newsItems]);
+  
+
   return (
-    <div className=" space-y-4">
+    <div className="space-y-4">
       {newsItems.map((item, index) => (
         <div 
           key={index}
-          className={`p-4 rounded-lg border transition-all duration-300  cursor-pointer ${getSentimentBg(item.sentiment)} ${
+          className={`p-4 rounded-lg border transition-all duration-300 cursor-pointer ${getSentimentBg(item.sentiment)} ${
             item.newItem && liveMode ? 'animate-fade-in' : ''
           }`}
         >
@@ -109,27 +119,24 @@ const SentimentFeed = ({ liveMode }) => {
           </div>
           
           <h3 className="text-lg font-medium mb-2">{item.title}</h3>
-          
-          <p className="text-sm text-gray-300 mb-3">
-            {item.snippet}
-          </p>
+          <p className="text-sm text-gray-300 mb-3">{item.snippet}</p>
           
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <span className={`font-medium ${getSentimentColor(item.sentiment)}`}>
                 {item.sentiment.charAt(0).toUpperCase() + item.sentiment.slice(1)}
               </span>
-              
+
               <div className="flex items-center space-x-1 px-2 py-1 rounded-full bg-white/10">
                 <span>😮</span>
                 <span className="text-xs">{item.emotion}</span>
               </div>
-              
+
               <div className="text-xs text-gray-400">
                 Bias: {item.bias}
               </div>
             </div>
-            
+
             <div className="flex items-center space-x-2">
               {item.verified && (
                 <Badge variant="outline" className="border-fluvio/30 text-fluvio text-xs bg-fluvio/10 p-2">
@@ -137,15 +144,21 @@ const SentimentFeed = ({ liveMode }) => {
                 </Badge>
               )}
               
-              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs flex items-center">
-                View Full
-                <ExternalLink className=" h-3 w-3" />
-              </Button>
+              <a
+                href={item.newsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs flex items-center">
+                  View Full
+                  <ExternalLink className=" h-3 w-3" />
+                </Button>
+              </a>
             </div>
           </div>
         </div>
       ))}
-      
+
       <div className="p-4">
         <Button variant="ghost" className="w-full flex items-center justify-center gap-2 text-gray-400">
           <span>Load more</span>
