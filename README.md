@@ -68,3 +68,5 @@ It captures real-time headlines, analyzes them with AI for **sentiment** and **b
 | Source trust is unclear         | On-chain signature proves authenticity    |
 
 ---
+
+## Thank You for Reading
